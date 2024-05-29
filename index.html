@@ -1,0 +1,467 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Healthcare Payment System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #74ABE2, #5563DE);
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            padding: 20px 40px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #444;
+            margin-bottom: 20px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+            .section h2 {
+                color: #444;
+                margin-bottom: 15px;
+                border-bottom: 2px solid #eee;
+                padding-bottom: 5px;
+            }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+            .input-group label {
+                display: block;
+                font-weight: bold;
+                margin-bottom: 5px;
+                color: #333;
+            }
+
+            .input-group input[type="text"],
+            .input-group input[type="number"] {
+                width: 100%;
+                padding: 10px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+
+            .input-group button {
+                padding: 10px 20px;
+                border: none;
+                background-color: #28a745;
+                color: #fff;
+                cursor: pointer;
+                border-radius: 5px;
+                font-size: 14px;
+                transition: background-color 0.3s;
+                margin-right: 10px;
+            }
+
+                .input-group button:hover {
+                    background-color: #218838;
+                }
+
+            .input-group .btn-revoke {
+                background-color: #dc3545;
+            }
+
+                .input-group .btn-revoke:hover {
+                    background-color: #c82333;
+                }
+
+            .input-group .btn-check {
+                background-color: #007bff;
+            }
+
+                .input-group .btn-check:hover {
+                    background-color: #0056b3;
+                }
+
+        #balanceResult, #consentResult {
+            margin-top: 10px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        #error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/gh/ethereum/web3.js@1.3.4/dist/web3.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Healthcare Payment System</h1>
+
+        <div class="section">
+            <h2>Consent Management</h2>
+            <div class="input-group">
+                <label for="providerAddressConsent">Healthcare Provider Address:</label>
+                <input type="text" id="providerAddressConsent">
+            </div>
+            <div class="input-group">
+                <button onclick="grantConsent()">Grant Consent</button>
+                <button class="btn-revoke" onclick="revokeConsent()">Revoke Consent</button>
+                <button class="btn-check" onclick="checkConsent()">Check Consent</button>
+            </div>
+            <p id="consentResult"></p>
+        </div>
+
+        <div class="section">
+            <h2>Initiate Payment</h2>
+            <div class="input-group">
+                <label for="providerAddress">Healthcare Provider Address:</label>
+                <input type="text" id="providerAddress">
+            </div>
+            <div class="input-group">
+                <label for="paymentAmount">Payment Amount (in wei):</label>
+                <input type="number" id="paymentAmount">
+            </div>
+            <div class="input-group">
+                <button onclick="initiatePayment()">Initiate Payment</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Check Balance</h2>
+            <div class="input-group">
+                <label for="balanceAddress">Healthcare Provider Address:</label>
+                <input type="text" id="balanceAddress">
+            </div>
+            <div class="input-group">
+                <button class="btn-check" onclick="checkBalance()">Check Balance</button>
+            </div>
+            <p id="balanceResult"></p>
+        </div>
+    </div>
+
+    <script>
+        const healthcarePaymentABI = [
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "payer",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "PaymentInitiated",
+                "type": "event"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "authorizePayment",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    }
+                ],
+                "name": "balances",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    }
+                ],
+                "name": "checkBalance",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "initiatePayment",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
+        const patientConsentManagementABI = [
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "patient",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "bool",
+                        "name": "consentStatus",
+                        "type": "bool"
+                    }
+                ],
+                "name": "ConsentChanged",
+                "type": "event"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    }
+                ],
+                "name": "grantConsent",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    }
+                ],
+                "name": "revokeConsent",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "patient",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "healthcareProvider",
+                        "type": "address"
+                    }
+                ],
+                "name": "checkConsent",
+                "outputs": [
+                    {
+                        "internalType": "bool",
+                        "name": "",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    }
+                ],
+                "name": "consent",
+                "outputs": [
+                    {
+                        "internalType": "bool",
+                        "name": "",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+
+        const healthcarePaymentAddress = '0x6795B5de97c5aFaeB4250EaA79676b82d3FB6294'; // HealthcarePayment contract address
+        const patientConsentManagementAddress = '0x83e3688d81FfD846DEc40A56A792fa3BFA54500F'; // PatientConsentManagement contract address
+
+        let web3;
+        let healthcarePaymentContract;
+        let patientConsentManagementContract;
+        let accounts;
+
+        window.addEventListener('load', async () => {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    accounts = await web3.eth.getAccounts();
+                    initializeContracts();
+                } catch (error) {
+                    console.error("User denied account access", error);
+                }
+            } else if (window.web3) {
+                web3 = new Web3(web3.currentProvider);
+                accounts = await web3.eth.getAccounts();
+                initializeContracts();
+            } else {
+                console.log('Non-Ethereum browser detected. You should consider trying MetaMask!');
+            }
+        });
+
+        function initializeContracts() {
+            healthcarePaymentContract = new web3.eth.Contract(healthcarePaymentABI, healthcarePaymentAddress);
+            patientConsentManagementContract = new web3.eth.Contract(patientConsentManagementABI, patientConsentManagementAddress);
+        }
+
+        async function initiatePayment() {
+            const providerAddress = document.getElementById('providerAddress').value;
+            const paymentAmount = document.getElementById('paymentAmount').value;
+            if (healthcarePaymentContract) {
+                try {
+                    await healthcarePaymentContract.methods.initiatePayment(providerAddress, paymentAmount).send({ from: accounts[0] });
+                    alert("Payment initiated successfully");
+                } catch (error) {
+                    alert("Failed to initiate payment: " + error.message);
+                }
+            } else {
+                alert("Healthcare Payment contract is not initialized.");
+            }
+        }
+
+        async function checkBalance() {
+            const balanceAddress = document.getElementById('balanceAddress').value;
+            if (healthcarePaymentContract) {
+                try {
+                    const balance = await healthcarePaymentContract.methods.checkBalance(balanceAddress).call();
+                    document.getElementById('balanceResult').innerText = `Balance: ${web3.utils.fromWei(balance)} ether`;
+                } catch (error) {
+                    alert("Failed to check balance: " + error.message);
+                }
+            } else {
+                alert("Healthcare Payment contract is not initialized.");
+            }
+        }
+
+        async function grantConsent() {
+            const providerAddress = document.getElementById('providerAddressConsent').value;
+            if (patientConsentManagementContract) {
+                try {
+                    await patientConsentManagementContract.methods.grantConsent(providerAddress).send({ from: accounts[0] });
+                    alert("Consent granted successfully");
+                } catch (error) {
+                    alert("Failed to grant consent: " + error.message);
+                }
+            } else {
+                alert("Patient Consent Management contract is not initialized.");
+            }
+        }
+
+        async function revokeConsent() {
+            const providerAddress = document.getElementById('providerAddressConsent').value;
+            if (patientConsentManagementContract) {
+                try {
+                    await patientConsentManagementContract.methods.revokeConsent(providerAddress).send({ from: accounts[0] });
+                    alert("Consent revoked successfully");
+                } catch (error) {
+                    alert("Failed to revoke consent: " + error.message);
+                }
+            } else {
+                alert("Patient Consent Management contract is not initialized.");
+            }
+        }
+
+        async function checkConsent() {
+            const providerAddress = document.getElementById('providerAddressConsent').value;
+            if (patientConsentManagementContract) {
+                try {
+                    const hasConsent = await patientConsentManagementContract.methods.checkConsent(accounts[0], providerAddress).call();
+                    const result = hasConsent ? "Yes" : "No";
+                    document.getElementById('consentResult').innerText = `Consent status: ${result}`;
+                } catch (error) {
+                    alert("Failed to check consent: " + error.message);
+                }
+            } else {
+                alert("Patient Consent Management contract is not initialized.");
+            }
+        }
+    </script>
+</body>
+</html>
